@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
+import subprocess
+import time
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -152,10 +155,71 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to TOML config file (default: power_scrapper.toml if present)",
     )
 
+    # Docker lifecycle
+    parser.add_argument(
+        "--docker-up",
+        action="store_true",
+        default=False,
+        help="Auto-start SearXNG Docker container before scraping and stop it after",
+    )
+
     # Debug
     parser.add_argument("--debug", action="store_true", default=None, help="Enable debug logging")
 
     return parser
+
+
+# ---------------------------------------------------------------------------
+# Docker lifecycle
+# ---------------------------------------------------------------------------
+
+_DOCKER_COMPOSE_DIR = Path(__file__).resolve().parent.parent / "docker"
+
+
+def _docker_compose_up(log: logging.Logger) -> bool:
+    """Start SearXNG via docker compose. Returns True on success."""
+    compose_file = _DOCKER_COMPOSE_DIR / "docker-compose.yml"
+    if not compose_file.exists():
+        log.error("docker-compose.yml not found at %s", compose_file)
+        return False
+
+    log.info("Starting SearXNG container...")
+    result = subprocess.run(
+        ["docker", "compose", "up", "-d"],
+        cwd=_DOCKER_COMPOSE_DIR,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        log.error("Failed to start SearXNG: %s", result.stderr.strip())
+        return False
+
+    # Wait for SearXNG to be ready (up to 30s)
+    import httpx
+
+    for i in range(30):
+        try:
+            resp = httpx.get("http://localhost:8080/healthz", timeout=2)
+            if resp.status_code == 200:
+                log.info("SearXNG is ready on http://localhost:8080")
+                return True
+        except httpx.HTTPError:
+            pass
+        time.sleep(1)
+
+    log.warning("SearXNG started but health check timed out — proceeding anyway")
+    return True
+
+
+def _docker_compose_down(log: logging.Logger) -> None:
+    """Stop SearXNG via docker compose."""
+    log.info("Stopping SearXNG container...")
+    subprocess.run(
+        ["docker", "compose", "down"],
+        cwd=_DOCKER_COMPOSE_DIR,
+        capture_output=True,
+        text=True,
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -196,10 +260,20 @@ def main(argv: list[str] | None = None) -> None:
     log = setup_logging(config.debug)
     log.info("Starting power_scrapper: query=%r, pages=%d", config.query, config.max_pages)
 
-    scraper = Scraper(config, small_media_file=args.small_media_file)
-    articles = asyncio.run(scraper.run())
+    # Auto-start SearXNG if requested
+    docker_started = False
+    if args.docker_up:
+        docker_started = _docker_compose_up(log)
+        if docker_started and not config.searxng_url:
+            config.searxng_url = "http://localhost:8080"
 
-    log.info("Done. %d articles scraped.", len(articles))
+    try:
+        scraper = Scraper(config, small_media_file=args.small_media_file)
+        articles = asyncio.run(scraper.run())
+        log.info("Done. %d articles scraped.", len(articles))
+    finally:
+        if docker_started and args.docker_up:
+            _docker_compose_down(log)
 
 
 if __name__ == "__main__":
