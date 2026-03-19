@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 
 from power_scrapper.config import ArticleData, ScraperConfig
 from power_scrapper.errors import SearchError
+from power_scrapper.extraction.base import ITextExtractor
+from power_scrapper.extraction.cascade import CascadeTextExtractor
 from power_scrapper.http.httpx_client import HttpxClient
 from power_scrapper.log import setup_logging
 from power_scrapper.output.base import IOutputWriter
@@ -19,7 +21,7 @@ from power_scrapper.search.searxng import SearXNGStrategy
 from power_scrapper.utils.dedup import deduplicate_articles
 
 if TYPE_CHECKING:
-    pass  # Future: ITextExtractor will be imported here
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +35,13 @@ class Scraper:
         *,
         search_strategies: list[ISearchStrategy] | None = None,
         output_writers: list[IOutputWriter] | None = None,
+        text_extractor: ITextExtractor | None = None,
     ) -> None:
         self.config = config
         self._http_client: HttpxClient | None = None
         self._search_strategies = search_strategies
         self._output_writers = output_writers
+        self._text_extractor = text_extractor
 
     # ------------------------------------------------------------------
     # Public API
@@ -82,9 +86,16 @@ class Scraper:
             articles = deduplicate_articles(all_articles)
             run_logger.info("After dedup: %d unique articles", len(articles))
 
-            # 5. Text extraction (placeholder -- will be wired in Phase 3)
-            # if self.config.extract_articles and self._text_extractor:
-            #     articles = await self._extract_texts(articles)
+            # 5. Text extraction
+            if self.config.extract_articles:
+                extractor = self._text_extractor or CascadeTextExtractor()
+                run_logger.info("Extracting article text with %s...", extractor.name)
+                articles = await self._extract_texts(articles, extractor)
+                run_logger.info(
+                    "Extraction done: %d/%d articles have text",
+                    sum(1 for a in articles if a.article_text),
+                    len(articles),
+                )
 
             # 6. Output
             output_dir = Path(self.config.output_dir)
@@ -115,6 +126,23 @@ class Scraper:
             strategies.append(SearXNGStrategy(self.config.searxng_url, self._http_client))
         # Browser strategies will be added in Phase 4
         return strategies
+
+    async def _extract_texts(
+        self,
+        articles: list[ArticleData],
+        extractor: ITextExtractor,
+    ) -> list[ArticleData]:
+        """Run text extraction on articles using the cascade extractor."""
+        if isinstance(extractor, CascadeTextExtractor):
+            return await extractor.extract_batch(
+                articles,
+                max_concurrent=self.config.max_concurrent_extractions,
+            )
+        # For non-cascade extractors, do a simple sequential extraction
+        for article in articles:
+            if not article.article_text:
+                article.article_text = await extractor.extract(article.url)
+        return articles
 
     def _build_writers(self) -> list[IOutputWriter]:
         """Build output writers from the configured format list."""
