@@ -17,7 +17,10 @@ from power_scrapper.output.csv_writer import CsvWriter
 from power_scrapper.output.excel import ExcelWriter
 from power_scrapper.output.json_writer import JsonWriter
 from power_scrapper.search.base import ISearchStrategy
+from power_scrapper.search.google_news import GoogleNewsStrategy
+from power_scrapper.search.google_search import GoogleSearchStrategy
 from power_scrapper.search.searxng import SearXNGStrategy
+from power_scrapper.search.yandex import YandexSearchStrategy
 from power_scrapper.utils.dedup import deduplicate_articles
 
 if TYPE_CHECKING:
@@ -42,6 +45,7 @@ class Scraper:
         self._search_strategies = search_strategies
         self._output_writers = output_writers
         self._text_extractor = text_extractor
+        self._browser_strategies_to_close: list[ISearchStrategy] = []
 
     # ------------------------------------------------------------------
     # Public API
@@ -111,6 +115,15 @@ class Scraper:
             return articles
 
         finally:
+            # Close browser-based strategies to release Patchright processes.
+            for bs in self._browser_strategies_to_close:
+                try:
+                    if hasattr(bs, "close"):
+                        await bs.close()
+                except Exception:  # noqa: BLE001
+                    logger.debug("Failed to close browser strategy %s", bs.name)
+            self._browser_strategies_to_close.clear()
+
             if self._http_client:
                 await self._http_client.close()
 
@@ -119,12 +132,31 @@ class Scraper:
     # ------------------------------------------------------------------
 
     async def _build_strategies(self) -> list[ISearchStrategy]:
-        """Build the default list of search strategies from config."""
+        """Build the default list of search strategies from config.
+
+        SearXNG is preferred when configured.  Browser-based strategies
+        (Google Search, Google News, Yandex) are added as fallbacks and
+        are silently skipped when patchright is not installed.
+        """
         strategies: list[ISearchStrategy] = []
+
         if self.config.searxng_url:
             assert self._http_client is not None
             strategies.append(SearXNGStrategy(self.config.searxng_url, self._http_client))
-        # Browser strategies will be added in Phase 4
+
+        # Browser-based fallbacks — each checks is_available() before use.
+        browser_strategies: list[ISearchStrategy] = [
+            GoogleSearchStrategy(),
+            GoogleNewsStrategy(),
+            YandexSearchStrategy(),
+        ]
+        for bs in browser_strategies:
+            if await bs.is_available():
+                strategies.append(bs)
+                self._browser_strategies_to_close.append(bs)
+            else:
+                logger.debug("Browser strategy %s not available, skipping", bs.name)
+
         return strategies
 
     async def _extract_texts(
