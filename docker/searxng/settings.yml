@@ -34,7 +34,7 @@ engines:
 
   - name: yandex
     engine: yandex
-    shortcut: ya
+    shortcut: ydx
     disabled: false
 
   - name: bing

@@ -48,6 +48,9 @@ _RELATIVE_RE = re.compile(
 
 # Absolute date formats to try, in order.
 _ABSOLUTE_FORMATS: list[str] = [
+    "%Y-%m-%dT%H:%M:%S%z",  # 2024-01-15T10:30:00+00:00 (ISO with tz)
+    "%Y-%m-%dT%H:%M:%S",  # 2024-01-15T10:30:00 (ISO without tz)
+    "%Y-%m-%dT%H:%M:%SZ",  # 2024-01-15T10:30:00Z (ISO UTC)
     "%b %d, %Y",  # Jan 15, 2024
     "%d %b %Y",  # 15 Jan 2024
     "%Y-%m-%d",  # 2024-01-15
