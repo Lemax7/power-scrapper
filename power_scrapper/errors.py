@@ -11,11 +11,13 @@ class ScraperError(Exception):
 
 # -- Configuration -----------------------------------------------------------
 
+
 class ConfigError(ScraperError):
     """Invalid or missing configuration."""
 
 
 # -- Search ------------------------------------------------------------------
+
 
 class SearchError(ScraperError):
     """Failed to retrieve search results from any source."""
@@ -35,11 +37,13 @@ class BrowserSearchError(SearchError):
 
 # -- Extraction --------------------------------------------------------------
 
+
 class ExtractionError(ScraperError):
     """Failed to extract article text from a page."""
 
 
 # -- HTTP client -------------------------------------------------------------
+
 
 class HttpClientError(ScraperError):
     """HTTP request failed across all client tiers."""
@@ -51,6 +55,7 @@ class AllTiersExhaustedError(HttpClientError):
 
 # -- Proxy -------------------------------------------------------------------
 
+
 class ProxyError(ScraperError):
     """Proxy-related failure."""
 
@@ -60,6 +65,7 @@ class NoWorkingProxyError(ProxyError):
 
 
 # -- Output ------------------------------------------------------------------
+
 
 class OutputError(ScraperError):
     """Failed to write output (Excel, JSON, CSV, etc.)."""

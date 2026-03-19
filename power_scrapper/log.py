@@ -24,9 +24,7 @@ def setup_logging(debug: bool = False) -> logging.Logger:
     # Avoid adding duplicate handlers when called more than once.
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-        )
+        handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
         logger.addHandler(handler)
 
     logger.setLevel(logging.DEBUG if debug else logging.INFO)

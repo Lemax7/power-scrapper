@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 
 from power_scrapper.config import ArticleData, ScraperConfig
+
+logger = logging.getLogger(__name__)
 
 
 class ISearchStrategy(ABC):
@@ -28,3 +31,52 @@ class ISearchStrategy(ABC):
     @abstractmethod
     def name(self) -> str:
         """Human-readable strategy name (e.g. ``"searxng"``)."""
+
+
+class BrowserSearchStrategy(ISearchStrategy):
+    """Base class for browser-based search strategies (Patchright).
+
+    Provides common ``_ensure_browser()``, ``close()``, and ``is_available()``
+    implementations shared by :class:`GoogleSearchStrategy`,
+    :class:`GoogleNewsStrategy`, and :class:`YandexSearchStrategy`.
+    """
+
+    def __init__(self, *, patchright_context_manager: object | None = None) -> None:
+        """Accept an optional async Patchright context manager for DI/testing."""
+        self._pw_cm = patchright_context_manager
+        self._pw: object | None = None
+        self._browser: object | None = None
+
+    async def is_available(self) -> bool:
+        """Return True if patchright is importable."""
+        try:
+            import patchright  # noqa: F401
+
+            return True
+        except ImportError:
+            return False
+
+    async def close(self) -> None:
+        """Shut down the browser and Patchright process."""
+        if self._browser is not None:
+            await self._browser.close()  # type: ignore[union-attr]
+            self._browser = None
+        if self._pw is not None:
+            await self._pw.stop()  # type: ignore[union-attr]
+            self._pw = None
+
+    async def _ensure_browser(self) -> None:
+        """Lazily launch a headless Chromium via Patchright."""
+        if self._browser is not None:
+            return
+
+        if self._pw_cm is not None:
+            # DI path (tests inject a mock context manager)
+            self._pw = await self._pw_cm.__aenter__()
+            self._browser = await self._pw.chromium.launch(headless=True)
+            return
+
+        from patchright.async_api import async_playwright
+
+        self._pw = await async_playwright().start()
+        self._browser = await self._pw.chromium.launch(headless=True)  # type: ignore[union-attr]

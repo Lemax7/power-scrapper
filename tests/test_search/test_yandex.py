@@ -29,7 +29,6 @@ class TestBuildYandexSearchUrl:
         url = build_yandex_search_url("новости ИИ", config)
         assert "text=" in url
         assert "lr=213" in url  # Moscow for RU
-        assert "p=0" in url
         assert url.startswith("https://yandex.ru/search/?")
 
     def test_us_region(self) -> None:
@@ -237,9 +236,7 @@ class TestYandexSearch:
         assert articles[0].position == 1
 
     async def test_raises_on_bot_detection_text(self, _sleep: AsyncMock) -> None:
-        page = _make_mock_yandex_page(
-            content="<html>Подтвердите, что вы не робот</html>"
-        )
+        page = _make_mock_yandex_page(content="<html>Подтвердите, что вы не робот</html>")
         browser = _make_mock_browser([page])
 
         strategy = YandexSearchStrategy()

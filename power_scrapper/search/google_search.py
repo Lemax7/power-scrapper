@@ -6,12 +6,13 @@ import asyncio
 import logging
 import random
 from datetime import datetime
-from urllib.parse import quote_plus, urlparse
 
 from power_scrapper.config import MAX_DELAY, MIN_DELAY, MIN_TITLE_LENGTH, ArticleData, ScraperConfig
 from power_scrapper.errors import BotDetectedError, BrowserSearchError
-from power_scrapper.search.base import ISearchStrategy
-from power_scrapper.utils import DateParser, PunycodeDecoder
+from power_scrapper.search.base import BrowserSearchStrategy
+from power_scrapper.utils import DateParser
+from power_scrapper.utils.punycode import extract_domain as _extract_domain
+from power_scrapper.utils.url_builder import build_google_search_url
 
 logger = logging.getLogger(__name__)
 
@@ -68,19 +69,6 @@ _RESULT_SELECTORS: list[str] = [
 ]
 
 
-def build_google_search_url(
-    query: str,
-    config: ScraperConfig,
-    *,
-    start: int = 0,
-) -> str:
-    """Build a Google Search URL from query and config."""
-    params = f"q={quote_plus(query)}&hl={config.language}&gl={config.country}&start={start}&num=10"
-    if config.time_period:
-        params += f"&tbs=qdr:{config.time_period}"
-    return f"https://www.google.com/search?{params}"
-
-
 def check_bot_detection(content: str) -> bool:
     """Return True if the page content contains bot-detection signals."""
     content_lower = content.lower()
@@ -93,26 +81,8 @@ def _is_google_system_message(title: str) -> bool:
     return any(msg in title_lower for msg in GOOGLE_SYSTEM_MESSAGES)
 
 
-def _extract_domain(url: str) -> str:
-    """Extract and decode the domain from a URL."""
-    try:
-        netloc = urlparse(url).netloc
-        host = netloc.split(":")[0] if netloc else ""
-        if host:
-            return PunycodeDecoder.decode_domain(host)
-        return netloc
-    except Exception:  # noqa: BLE001
-        return url
-
-
-class GoogleSearchStrategy(ISearchStrategy):
+class GoogleSearchStrategy(BrowserSearchStrategy):
     """Google Search results via Patchright browser automation."""
-
-    def __init__(self, *, patchright_context_manager: object | None = None) -> None:
-        """Accept an optional async Patchright context manager for DI/testing."""
-        self._pw_cm = patchright_context_manager
-        self._pw: object | None = None
-        self._browser: object | None = None
 
     # ------------------------------------------------------------------
     # ISearchStrategy
@@ -146,9 +116,7 @@ class GoogleSearchStrategy(ISearchStrategy):
                 all_articles.extend(articles)
 
                 if not articles:
-                    logger.info(
-                        "GoogleSearch page %d returned 0 results, stopping", page_num + 1
-                    )
+                    logger.info("GoogleSearch page %d returned 0 results, stopping", page_num + 1)
                     break
             except BotDetectedError:
                 raise
@@ -161,47 +129,13 @@ class GoogleSearchStrategy(ISearchStrategy):
 
         return all_articles
 
-    async def is_available(self) -> bool:
-        """Return True if patchright is importable."""
-        try:
-            import patchright  # noqa: F401
-
-            return True
-        except ImportError:
-            return False
-
     @property
     def name(self) -> str:  # noqa: D401
         return "google_search"
 
-    async def close(self) -> None:
-        """Shut down the browser and Patchright process."""
-        if self._browser is not None:
-            await self._browser.close()  # type: ignore[union-attr]
-            self._browser = None
-        if self._pw is not None:
-            await self._pw.stop()  # type: ignore[union-attr]
-            self._pw = None
-
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
-
-    async def _ensure_browser(self) -> None:
-        """Lazily launch a headless Chromium via Patchright."""
-        if self._browser is not None:
-            return
-
-        if self._pw_cm is not None:
-            # DI path (tests inject a mock context manager)
-            self._pw = await self._pw_cm.__aenter__()
-            self._browser = await self._pw.chromium.launch(headless=True)
-            return
-
-        from patchright.async_api import async_playwright
-
-        self._pw = await async_playwright().start()
-        self._browser = await self._pw.chromium.launch(headless=True)  # type: ignore[union-attr]
 
     async def _parse_results(self, page: object, page_number: int) -> list[ArticleData]:
         """Extract search result items from a Google Search results page."""
@@ -234,9 +168,7 @@ class GoogleSearchStrategy(ISearchStrategy):
             except Exception:  # noqa: BLE001
                 logger.debug("GoogleSearch: failed to parse result %d on page %d", idx, page_number)
 
-        logger.info(
-            "GoogleSearch page %d: %d results extracted", page_number, len(articles)
-        )
+        logger.info("GoogleSearch page %d: %d results extracted", page_number, len(articles))
         return articles
 
     async def _parse_single_result(

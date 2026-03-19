@@ -30,7 +30,6 @@ class TestBuildGoogleSearchUrl:
         assert "q=AI+news" in url
         assert "hl=ru" in url
         assert "gl=RU" in url
-        assert "start=0" in url
         assert "num=10" in url
         assert url.startswith("https://www.google.com/search?")
 

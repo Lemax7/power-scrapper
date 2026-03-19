@@ -72,9 +72,7 @@ class TestSearXNGSearch:
     """Test SearXNGStrategy.search()."""
 
     async def test_single_page(self) -> None:
-        http = _make_http_client(
-            [HttpResponse(200, _searxng_json(SAMPLE_RESULTS_PAGE1), {}, "")]
-        )
+        http = _make_http_client([HttpResponse(200, _searxng_json(SAMPLE_RESULTS_PAGE1), {}, "")])
         strategy = SearXNGStrategy("http://localhost:8080", http)
         config = ScraperConfig(query="test")
 
@@ -97,10 +95,12 @@ class TestSearXNGSearch:
         assert second.source == "ria.ru"
 
     async def test_multi_page(self) -> None:
-        http = _make_http_client([
-            HttpResponse(200, _searxng_json(SAMPLE_RESULTS_PAGE1), {}, ""),
-            HttpResponse(200, _searxng_json(SAMPLE_RESULTS_PAGE2), {}, ""),
-        ])
+        http = _make_http_client(
+            [
+                HttpResponse(200, _searxng_json(SAMPLE_RESULTS_PAGE1), {}, ""),
+                HttpResponse(200, _searxng_json(SAMPLE_RESULTS_PAGE2), {}, ""),
+            ]
+        )
         strategy = SearXNGStrategy("http://localhost:8080/", http)
         config = ScraperConfig(query="test")
 
@@ -112,10 +112,12 @@ class TestSearXNGSearch:
         assert articles[2].title == "Third Article"
 
     async def test_stops_on_empty_results(self) -> None:
-        http = _make_http_client([
-            HttpResponse(200, _searxng_json(SAMPLE_RESULTS_PAGE1), {}, ""),
-            HttpResponse(200, _searxng_json([]), {}, ""),
-        ])
+        http = _make_http_client(
+            [
+                HttpResponse(200, _searxng_json(SAMPLE_RESULTS_PAGE1), {}, ""),
+                HttpResponse(200, _searxng_json([]), {}, ""),
+            ]
+        )
         strategy = SearXNGStrategy("http://localhost:8080", http)
         config = ScraperConfig(query="test")
 
@@ -126,9 +128,7 @@ class TestSearXNGSearch:
         assert http.get.call_count == 2
 
     async def test_uses_config_language(self) -> None:
-        http = _make_http_client(
-            [HttpResponse(200, _searxng_json([]), {}, "")]
-        )
+        http = _make_http_client([HttpResponse(200, _searxng_json([]), {}, "")])
         strategy = SearXNGStrategy("http://localhost:8080", http)
         config = ScraperConfig(query="AI news", language="en")
 
@@ -148,9 +148,7 @@ class TestSearXNGSearch:
                 "engine": "google",
             }
         ]
-        http = _make_http_client(
-            [HttpResponse(200, _searxng_json(results), {}, "")]
-        )
+        http = _make_http_client([HttpResponse(200, _searxng_json(results), {}, "")])
         strategy = SearXNGStrategy("http://localhost:8080", http)
         config = ScraperConfig(query="test")
 
@@ -158,9 +156,7 @@ class TestSearXNGSearch:
         assert articles[0].date == datetime(2024, 1, 15)
 
     async def test_trailing_slash_stripped(self) -> None:
-        http = _make_http_client(
-            [HttpResponse(200, _searxng_json([]), {}, "")]
-        )
+        http = _make_http_client([HttpResponse(200, _searxng_json([]), {}, "")])
         strategy = SearXNGStrategy("http://localhost:8080///", http)
         config = ScraperConfig(query="test")
 
@@ -188,9 +184,7 @@ class TestSearXNGErrors:
             await strategy.search("test", config, max_pages=1)
 
     async def test_non_200_raises_searxng_error(self) -> None:
-        http = _make_http_client(
-            [HttpResponse(502, "Bad Gateway", {}, "")]
-        )
+        http = _make_http_client([HttpResponse(502, "Bad Gateway", {}, "")])
         strategy = SearXNGStrategy("http://localhost:8080", http)
         config = ScraperConfig(query="test")
 
@@ -198,9 +192,7 @@ class TestSearXNGErrors:
             await strategy.search("test", config, max_pages=1)
 
     async def test_invalid_json_raises_searxng_error(self) -> None:
-        http = _make_http_client(
-            [HttpResponse(200, "not json at all", {}, "")]
-        )
+        http = _make_http_client([HttpResponse(200, "not json at all", {}, "")])
         strategy = SearXNGStrategy("http://localhost:8080", http)
         config = ScraperConfig(query="test")
 
@@ -217,17 +209,13 @@ class TestSearXNGAvailability:
     """Test is_available()."""
 
     async def test_available_when_200(self) -> None:
-        http = _make_http_client(
-            [HttpResponse(200, _searxng_json([]), {}, "")]
-        )
+        http = _make_http_client([HttpResponse(200, _searxng_json([]), {}, "")])
         strategy = SearXNGStrategy("http://localhost:8080", http)
 
         assert await strategy.is_available() is True
 
     async def test_unavailable_on_non_200(self) -> None:
-        http = _make_http_client(
-            [HttpResponse(500, "error", {}, "")]
-        )
+        http = _make_http_client([HttpResponse(500, "error", {}, "")])
         strategy = SearXNGStrategy("http://localhost:8080", http)
 
         assert await strategy.is_available() is False

@@ -11,9 +11,7 @@ import pandas as pd
 import pytest
 
 from power_scrapper.config import ArticleData
-from power_scrapper.errors import OutputError
 from power_scrapper.output import CsvWriter, ExcelWriter, IOutputWriter, JsonWriter
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -77,9 +75,7 @@ class TestExcelWriter:
     def test_extension(self) -> None:
         assert ExcelWriter().extension == ".xlsx"
 
-    def test_write_creates_file(
-        self, tmp_path: Path, sample_articles: list[ArticleData]
-    ) -> None:
+    def test_write_creates_file(self, tmp_path: Path, sample_articles: list[ArticleData]) -> None:
         writer = ExcelWriter()
         out = writer.write(sample_articles, tmp_path / "output.xlsx")
         assert out.exists()
@@ -99,9 +95,7 @@ class TestExcelWriter:
         df = pd.read_excel(out, engine="openpyxl")
         assert len(df) == len(sample_articles)
 
-    def test_write_russian_text(
-        self, tmp_path: Path, russian_articles: list[ArticleData]
-    ) -> None:
+    def test_write_russian_text(self, tmp_path: Path, russian_articles: list[ArticleData]) -> None:
         out = ExcelWriter().write(russian_articles, tmp_path / "output.xlsx")
         df = pd.read_excel(out, engine="openpyxl")
         assert df.iloc[0]["title"] == "Искусственный интеллект в России"
@@ -113,12 +107,8 @@ class TestExcelWriter:
         assert out.suffix == ".xlsx"
         assert out.exists()
 
-    def test_creates_parent_dirs(
-        self, tmp_path: Path, sample_articles: list[ArticleData]
-    ) -> None:
-        out = ExcelWriter().write(
-            sample_articles, tmp_path / "deep" / "nested" / "output.xlsx"
-        )
+    def test_creates_parent_dirs(self, tmp_path: Path, sample_articles: list[ArticleData]) -> None:
+        out = ExcelWriter().write(sample_articles, tmp_path / "deep" / "nested" / "output.xlsx")
         assert out.exists()
 
     def test_empty_articles(self, tmp_path: Path) -> None:
@@ -173,9 +163,7 @@ class TestJsonWriter:
         out = JsonWriter().write(sample_articles, tmp_path / "output")
         assert out.suffix == ".json"
 
-    def test_all_fields_present(
-        self, tmp_path: Path, sample_articles: list[ArticleData]
-    ) -> None:
+    def test_all_fields_present(self, tmp_path: Path, sample_articles: list[ArticleData]) -> None:
         out = JsonWriter().write(sample_articles, tmp_path / "output.json")
         data = json.loads(out.read_text(encoding="utf-8"))
         for item in data:
@@ -200,31 +188,23 @@ class TestCsvWriter:
     def test_extension(self) -> None:
         assert CsvWriter().extension == ".csv"
 
-    def test_write_creates_file(
-        self, tmp_path: Path, sample_articles: list[ArticleData]
-    ) -> None:
+    def test_write_creates_file(self, tmp_path: Path, sample_articles: list[ArticleData]) -> None:
         out = CsvWriter().write(sample_articles, tmp_path / "output.csv")
         assert out.exists()
         assert out.suffix == ".csv"
 
-    def test_bom_present(
-        self, tmp_path: Path, sample_articles: list[ArticleData]
-    ) -> None:
+    def test_bom_present(self, tmp_path: Path, sample_articles: list[ArticleData]) -> None:
         out = CsvWriter().write(sample_articles, tmp_path / "output.csv")
         raw = out.read_bytes()
         assert raw[:3] == b"\xef\xbb\xbf", "UTF-8 BOM must be present"
 
-    def test_correct_columns(
-        self, tmp_path: Path, sample_articles: list[ArticleData]
-    ) -> None:
+    def test_correct_columns(self, tmp_path: Path, sample_articles: list[ArticleData]) -> None:
         out = CsvWriter().write(sample_articles, tmp_path / "output.csv")
         with out.open(encoding="utf-8-sig", newline="") as fh:
             reader = csv.DictReader(fh)
             assert reader.fieldnames == EXPECTED_COLUMNS
 
-    def test_correct_row_count(
-        self, tmp_path: Path, sample_articles: list[ArticleData]
-    ) -> None:
+    def test_correct_row_count(self, tmp_path: Path, sample_articles: list[ArticleData]) -> None:
         out = CsvWriter().write(sample_articles, tmp_path / "output.csv")
         with out.open(encoding="utf-8-sig", newline="") as fh:
             reader = csv.DictReader(fh)
@@ -240,9 +220,7 @@ class TestCsvWriter:
             rows = list(reader)
         assert rows[0]["title"] == "Искусственный интеллект в России"
 
-    def test_date_iso_format(
-        self, tmp_path: Path, sample_articles: list[ArticleData]
-    ) -> None:
+    def test_date_iso_format(self, tmp_path: Path, sample_articles: list[ArticleData]) -> None:
         out = CsvWriter().write(sample_articles, tmp_path / "output.csv")
         with out.open(encoding="utf-8-sig", newline="") as fh:
             reader = csv.DictReader(fh)

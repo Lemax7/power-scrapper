@@ -77,9 +77,7 @@ class SmallMediaLoader:
                 self._domains = []
                 return self._domains
 
-        logger.debug(
-            "Using columns: source=%r, visibility=%r", source_col, visibility_col
-        )
+        logger.debug("Using columns: source=%r, visibility=%r", source_col, visibility_col)
 
         # Convert visibility to numeric, drop NaN
         df[visibility_col] = pd.to_numeric(df[visibility_col], errors="coerce")

@@ -4,28 +4,19 @@ from __future__ import annotations
 
 import json
 import logging
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus
 
 from power_scrapper.config import ArticleData, ScraperConfig
 from power_scrapper.errors import HttpClientError, SearXNGError
 from power_scrapper.http.base import IHttpClient
 from power_scrapper.search.base import ISearchStrategy
-from power_scrapper.utils import DateParser, PunycodeDecoder
+from power_scrapper.utils import DateParser
+from power_scrapper.utils.punycode import extract_domain
 
 logger = logging.getLogger(__name__)
 
-
-def _extract_domain(url: str) -> str:
-    """Extract the domain from *url* and decode any Punycode labels."""
-    try:
-        netloc = urlparse(url).netloc
-        # Strip port if present.
-        host = netloc.split(":")[0] if netloc else ""
-        if host:
-            return PunycodeDecoder.decode_domain(host)
-        return netloc
-    except Exception:  # noqa: BLE001
-        return url
+# Backward-compatible alias used by tests.
+_extract_domain = extract_domain
 
 
 class SearXNGStrategy(ISearchStrategy):
@@ -67,16 +58,12 @@ class SearXNGStrategy(ISearchStrategy):
                 raise SearXNGError(f"HTTP request to SearXNG failed: {exc}") from exc
 
             if resp.status_code != 200:
-                raise SearXNGError(
-                    f"SearXNG returned HTTP {resp.status_code} for page {page}"
-                )
+                raise SearXNGError(f"SearXNG returned HTTP {resp.status_code} for page {page}")
 
             try:
                 data = json.loads(resp.text)
             except json.JSONDecodeError as exc:
-                raise SearXNGError(
-                    f"SearXNG returned invalid JSON on page {page}: {exc}"
-                ) from exc
+                raise SearXNGError(f"SearXNG returned invalid JSON on page {page}: {exc}") from exc
 
             results = data.get("results", [])
             if not results:
@@ -108,9 +95,7 @@ class SearXNGStrategy(ISearchStrategy):
     async def is_available(self) -> bool:
         """Check whether the SearXNG instance is reachable."""
         try:
-            resp = await self._http.get(
-                f"{self._base_url}/search?q=test&format=json"
-            )
+            resp = await self._http.get(f"{self._base_url}/search?q=test&format=json")
             return resp.status_code == 200
         except (HttpClientError, Exception):  # noqa: BLE001
             return False

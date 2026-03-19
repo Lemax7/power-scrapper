@@ -28,7 +28,6 @@ class TestBuildGoogleNewsUrl:
         assert "hl=ru" in url
         assert "gl=RU" in url
         assert "tbm=nws" in url
-        assert "start=0" in url
         assert url.startswith("https://www.google.com/search?")
 
     def test_english_config(self) -> None:

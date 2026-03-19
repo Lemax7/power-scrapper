@@ -83,9 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--pages", "-p", type=int, default=3, help="Max pages to scrape (default: 3)"
     )
-    parser.add_argument(
-        "--searxng-url", help="SearXNG instance URL (e.g. http://localhost:8080)"
-    )
+    parser.add_argument("--searxng-url", help="SearXNG instance URL (e.g. http://localhost:8080)")
     parser.add_argument(
         "--time-period",
         "-t",
@@ -106,12 +104,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # Locale
-    parser.add_argument(
-        "--language", "-l", default="ru", help="Search language (default: ru)"
-    )
-    parser.add_argument(
-        "--country", "-c", default="RU", help="Search country (default: RU)"
-    )
+    parser.add_argument("--language", "-l", default="ru", help="Search language (default: ru)")
+    parser.add_argument("--country", "-c", default="RU", help="Search country (default: RU)")
 
     # Title expansion
     parser.add_argument(
@@ -140,7 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--proxy",
         action="store_true",
         default=None,
-        help="Enable proxy usage",
+        help="Enable proxy usage (planned, not yet active)",
     )
 
     # Concurrency

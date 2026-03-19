@@ -57,9 +57,7 @@ class PatchrightClient(IHttpClient):
         except Exception as exc:
             if isinstance(exc, HttpClientError):
                 raise
-            raise HttpClientError(
-                f"Failed to launch Patchright browser: {exc}"
-            ) from exc
+            raise HttpClientError(f"Failed to launch Patchright browser: {exc}") from exc
 
     async def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
         """Navigate to *url* in a new page and return the rendered HTML."""
@@ -69,7 +67,9 @@ class PatchrightClient(IHttpClient):
             page = await self._browser.new_page()  # type: ignore[union-attr]
             if headers:
                 await page.set_extra_http_headers(headers)
-            response = await page.goto(url, timeout=self._timeout * 1000, wait_until="domcontentloaded")
+            response = await page.goto(
+                url, timeout=self._timeout * 1000, wait_until="domcontentloaded"
+            )
             content = await page.content()
             status = response.status if response else 0
             return HttpResponse(
@@ -81,9 +81,7 @@ class PatchrightClient(IHttpClient):
         except Exception as exc:
             if isinstance(exc, HttpClientError):
                 raise
-            raise HttpClientError(
-                f"patchright GET {url!r} failed: {exc}"
-            ) from exc
+            raise HttpClientError(f"patchright GET {url!r} failed: {exc}") from exc
         finally:
             if page is not None:
                 try:

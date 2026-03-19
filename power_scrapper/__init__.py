@@ -1,4 +1,4 @@
-"""power_scrapper -- next-generation news scraping with SearXNG, Playwright, and multi-source extraction."""
+"""power_scrapper -- news scraping with SearXNG, Playwright, and multi-source extraction."""
 
 __version__ = "0.1.0"
 

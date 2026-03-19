@@ -43,8 +43,7 @@ class CurlCffiClient(IHttpClient):
             from curl_cffi.requests import AsyncSession  # type: ignore[import-untyped]
         except ModuleNotFoundError as exc:
             raise HttpClientError(
-                "curl_cffi is not installed. "
-                "Install it with: pip install curl_cffi"
+                "curl_cffi is not installed. Install it with: pip install curl_cffi"
             ) from exc
 
         kwargs: dict[str, object] = {
@@ -71,9 +70,7 @@ class CurlCffiClient(IHttpClient):
         except Exception as exc:
             if isinstance(exc, HttpClientError):
                 raise
-            raise HttpClientError(
-                f"curl_cffi GET {url!r} failed: {exc}"
-            ) from exc
+            raise HttpClientError(f"curl_cffi GET {url!r} failed: {exc}") from exc
 
     async def close(self) -> None:
         """Close the underlying curl_cffi session if open."""

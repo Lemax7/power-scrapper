@@ -49,12 +49,12 @@ _RELATIVE_RE = re.compile(
 # Absolute date formats to try, in order.
 _ABSOLUTE_FORMATS: list[str] = [
     "%b %d, %Y",  # Jan 15, 2024
-    "%d %b %Y",   # 15 Jan 2024
-    "%Y-%m-%d",   # 2024-01-15
-    "%d.%m.%Y",   # 15.01.2024
-    "%Y/%m/%d",   # 2024/01/15
+    "%d %b %Y",  # 15 Jan 2024
+    "%Y-%m-%d",  # 2024-01-15
+    "%d.%m.%Y",  # 15.01.2024
+    "%Y/%m/%d",  # 2024/01/15
     "%B %d, %Y",  # January 15, 2024
-    "%d %B %Y",   # 15 January 2024
+    "%d %B %Y",  # 15 January 2024
 ]
 
 
@@ -85,9 +85,7 @@ class DateParser:
         normalized = date_str.strip()
 
         # Step 1: translate Russian tokens to English equivalents.
-        normalized = _RU_TOKEN_RE.sub(
-            lambda m: RUSSIAN_PATTERNS[m.group(0)], normalized
-        )
+        normalized = _RU_TOKEN_RE.sub(lambda m: RUSSIAN_PATTERNS[m.group(0)], normalized)
 
         # Step 2: try relative-time parsing.
         result = DateParser._parse_relative_time(normalized)

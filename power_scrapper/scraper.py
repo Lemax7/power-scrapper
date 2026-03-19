@@ -59,6 +59,12 @@ class Scraper:
         """Execute the full scraping pipeline.  Returns deduplicated articles."""
         run_logger = setup_logging(self.config.debug)
 
+        # NOTE: Proxy integration is planned but not yet wired.
+        # config.use_proxy and config.proxy_rotation are accepted but
+        # currently unused.  At the expected scraping frequency (~1 req/hour)
+        # proxies are unlikely to be needed.  See proxy/ package for the
+        # ProxyManager implementation that will be connected here in future.
+
         # 1. Setup HTTP client
         self._http_client = HttpxClient()
 
@@ -77,9 +83,7 @@ class Scraper:
                             self.config,
                             max_pages=self.config.max_pages,
                         )
-                        run_logger.info(
-                            "%s returned %d articles", strategy.name, len(articles)
-                        )
+                        run_logger.info("%s returned %d articles", strategy.name, len(articles))
                         all_articles.extend(articles)
                     except SearchError as exc:
                         run_logger.warning("Strategy %s failed: %s", strategy.name, exc)
@@ -206,9 +210,7 @@ class Scraper:
 
         expansion_articles: list[ArticleData] = []
         titles = [
-            a.title
-            for a in articles[: self.config.max_titles_to_expand]
-            if len(a.title) > 20
+            a.title for a in articles[: self.config.max_titles_to_expand] if len(a.title) > 20
         ]
 
         for title in titles:
@@ -259,9 +261,7 @@ class Scraper:
                             r.source_type = "from_media_list"
                         media_articles.extend(results)
                     except Exception as exc:  # noqa: BLE001
-                        logger.debug(
-                            "Small media search failed for %s: %s", domain, exc
-                        )
+                        logger.debug("Small media search failed for %s: %s", domain, exc)
                     break  # Only use first available strategy per domain
 
         combined = articles + media_articles

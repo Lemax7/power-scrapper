@@ -36,11 +36,7 @@ def _looks_blocked(response: HttpResponse) -> bool:
 
     # Short responses with block-like status codes are suspicious.
     text_lower = response.text.lower()
-    for indicator in _BLOCKED_INDICATORS:
-        if indicator.lower() in text_lower:
-            return True
-
-    return False
+    return any(indicator.lower() in text_lower for indicator in _BLOCKED_INDICATORS)
 
 
 def _extract_domain(url: str) -> str:
@@ -70,8 +66,13 @@ class TieredHttpClient(IHttpClient):
         timeout: float = 10.0,
         proxy: str | None = None,
     ) -> None:
-        self._tiers = tiers if tiers is not None else self._build_default_tiers(
-            timeout=timeout, proxy=proxy,
+        self._tiers = (
+            tiers
+            if tiers is not None
+            else self._build_default_tiers(
+                timeout=timeout,
+                proxy=proxy,
+            )
         )
         self._domain_tier: dict[str, int] = {}
 

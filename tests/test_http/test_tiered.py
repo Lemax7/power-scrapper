@@ -14,10 +14,10 @@ from power_scrapper.http.tiered import (
     _looks_blocked,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_tier(
     name: str,
@@ -34,9 +34,14 @@ def _make_mock_tier(
     elif response is not None:
         mock.get = AsyncMock(return_value=response)
     else:
-        mock.get = AsyncMock(return_value=HttpResponse(
-            status_code=200, text="OK", headers={}, url="https://example.com",
-        ))
+        mock.get = AsyncMock(
+            return_value=HttpResponse(
+                status_code=200,
+                text="OK",
+                headers={},
+                url="https://example.com",
+            )
+        )
 
     mock.close = AsyncMock()
     return mock
@@ -58,6 +63,7 @@ def _blocked_response(url: str = "https://example.com") -> HttpResponse:
 # ---------------------------------------------------------------------------
 # _looks_blocked
 # ---------------------------------------------------------------------------
+
 
 class TestLooksBlocked:
     """Test the block-detection helper."""
@@ -110,6 +116,7 @@ class TestLooksBlocked:
 # _extract_domain
 # ---------------------------------------------------------------------------
 
+
 class TestExtractDomain:
     """Test domain extraction from URLs."""
 
@@ -130,6 +137,7 @@ class TestExtractDomain:
 # ---------------------------------------------------------------------------
 # TieredHttpClient
 # ---------------------------------------------------------------------------
+
 
 class TestTieredEscalation:
     """Test that the client escalates through tiers on failure."""
@@ -157,7 +165,9 @@ class TestTieredEscalation:
         t2.get.assert_awaited_once()
 
     async def test_escalates_on_403(self) -> None:
-        blocked = HttpResponse(status_code=403, text="Forbidden", headers={}, url="https://example.com")
+        blocked = HttpResponse(
+            status_code=403, text="Forbidden", headers={}, url="https://example.com"
+        )
         t1 = _make_mock_tier("tier1", response=blocked)
         t2 = _make_mock_tier("tier2", response=_ok_response())
 

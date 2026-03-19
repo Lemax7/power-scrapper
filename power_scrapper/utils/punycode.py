@@ -1,8 +1,9 @@
-"""Punycode / IDN domain decoding."""
+"""Punycode / IDN domain decoding and domain extraction utilities."""
 
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -42,3 +43,22 @@ class PunycodeDecoder:
                 decoded_parts.append(part)
 
         return ".".join(decoded_parts)
+
+
+def extract_domain(url: str) -> str:
+    """Extract the domain from *url* and decode any Punycode labels.
+
+    Strips the port from the netloc so that ``"https://example.com:8080/path"``
+    returns ``"example.com"`` (with Punycode labels decoded).
+
+    Falls back to returning the original *url* on any parsing error.
+    """
+    try:
+        netloc = urlparse(url).netloc
+        # Strip port if present.
+        host = netloc.split(":")[0] if netloc else ""
+        if host:
+            return PunycodeDecoder.decode_domain(host)
+        return netloc
+    except Exception:  # noqa: BLE001
+        return url
