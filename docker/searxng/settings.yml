@@ -1,0 +1,58 @@
+use_default_settings: true
+
+general:
+  instance_name: "power_scrapper SearXNG"
+  debug: false
+
+search:
+  safe_search: 0
+  default_lang: "ru"
+  formats:
+    - html
+    - json
+  autocomplete: ""
+
+server:
+  secret_key: "change-me-in-production"
+  bind_address: "0.0.0.0"
+  port: 8080
+  limiter: false
+  image_proxy: false
+
+ui:
+  default_theme: simple
+
+categories_as_tabs:
+  general:
+  news:
+
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    disabled: false
+
+  - name: yandex
+    engine: yandex
+    shortcut: ya
+    disabled: false
+
+  - name: bing
+    engine: bing
+    shortcut: b
+    disabled: false
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
+
+  - name: google news
+    engine: google_news
+    shortcut: gn
+    disabled: false
+
+outgoing:
+  request_timeout: 10
+  max_request_timeout: 15
+  useragent_suffix: ""

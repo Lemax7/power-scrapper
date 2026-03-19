@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: power_scrapper_searxng
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+    restart: unless-stopped
