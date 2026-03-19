@@ -77,6 +77,26 @@ def _normalize_url(url: str) -> str:
     return f"{host}{path}"
 
 
+def filter_relevant(articles: list[ArticleData], query: str, *, min_term_matches: int = 1) -> list[ArticleData]:
+    """Keep only articles whose title or body contains at least *min_term_matches* query terms.
+
+    Query is split on whitespace; each term must be >= 3 chars to count.
+    Matching is case-insensitive.
+    """
+    terms = [t.lower() for t in query.split() if len(t) >= 3]
+    if not terms:
+        return articles
+
+    relevant: list[ArticleData] = []
+    for article in articles:
+        haystack = f"{article.title} {article.body}".lower()
+        hits = sum(1 for t in terms if t in haystack)
+        if hits >= min_term_matches:
+            relevant.append(article)
+
+    return relevant
+
+
 def deduplicate_articles(articles: list[ArticleData]) -> list[ArticleData]:
     """Remove duplicate articles in a single pass.
 

@@ -3,6 +3,7 @@
 from power_scrapper.utils.date_parser import DateParser
 from power_scrapper.utils.dedup import (
     deduplicate_articles,
+    filter_relevant,
     normalize_title_for_deduplication,
 )
 from power_scrapper.utils.punycode import PunycodeDecoder, extract_domain
@@ -25,6 +26,7 @@ __all__ = [
     "build_site_query",
     "build_yandex_search_url",
     "deduplicate_articles",
+    "filter_relevant",
     "extract_domain",
     "normalize_title_for_deduplication",
 ]

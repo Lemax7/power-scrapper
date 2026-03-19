@@ -21,7 +21,7 @@ from power_scrapper.search.google_news import GoogleNewsStrategy
 from power_scrapper.search.google_search import GoogleSearchStrategy
 from power_scrapper.search.searxng import SearXNGStrategy
 from power_scrapper.search.yandex import YandexSearchStrategy
-from power_scrapper.utils.dedup import deduplicate_articles
+from power_scrapper.utils.dedup import deduplicate_articles, filter_relevant
 from power_scrapper.utils.small_media import SmallMediaLoader
 from power_scrapper.utils.url_builder import build_site_query
 
@@ -94,9 +94,18 @@ class Scraper:
                 run_logger.warning("No articles found from any strategy")
                 return []
 
-            # 4. Dedup
+            # 4. Dedup + relevance filter
             articles = deduplicate_articles(all_articles)
             run_logger.info("After dedup: %d unique articles", len(articles))
+
+            before = len(articles)
+            articles = filter_relevant(articles, self.config.query)
+            if len(articles) < before:
+                run_logger.info(
+                    "Relevance filter removed %d off-topic articles, %d remaining",
+                    before - len(articles),
+                    len(articles),
+                )
 
             # 4a. Title expansion — re-search using top article titles
             if self.config.expand_with_titles and articles:
