@@ -13,6 +13,7 @@ from power_scrapper.search.base import BrowserSearchStrategy
 from power_scrapper.search.google_search import check_bot_detection
 from power_scrapper.utils import DateParser
 from power_scrapper.utils.punycode import extract_domain as _extract_domain
+from power_scrapper.utils.text_cleaning import clean_snippet
 from power_scrapper.utils.url_builder import build_google_news_url
 
 logger = logging.getLogger(__name__)
@@ -53,9 +54,11 @@ class GoogleNewsStrategy(BrowserSearchStrategy):
                 await asyncio.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
 
                 content = await page.content()
-                if check_bot_detection(content):
+                current_url = str(page.url) if hasattr(page, "url") and isinstance(page.url, str) else ""
+                if check_bot_detection(content, current_url=current_url):
                     raise BotDetectedError("Google News detected bot activity")
 
+                await self._scroll_page(page)
                 articles = await self._parse_results(page, page_num + 1)
                 all_articles.extend(articles)
 
@@ -71,6 +74,9 @@ class GoogleNewsStrategy(BrowserSearchStrategy):
             finally:
                 await page.close()
 
+        # Calculate overall_position across all pages.
+        for i, article in enumerate(all_articles):
+            article.overall_position = i + 1
         return all_articles
 
     @property
@@ -178,7 +184,7 @@ class GoogleNewsStrategy(BrowserSearchStrategy):
             title=title,
             source=source,
             date=date,
-            body=body,
+            body=clean_snippet(body),
             source_type="google_news",
             page=page_number,
             position=position,

@@ -46,6 +46,8 @@ class ScraperConfig:
     max_titles_to_expand: int = 5
     time_period: str | None = None
     max_concurrent_extractions: int = 10
+    strict_search: bool = False
+    only_strategies: list[str] | None = None  # e.g. ["google_search"] or ["google_news"]
 
 
 @dataclass

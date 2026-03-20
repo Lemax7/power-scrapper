@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 
 from power_scrapper.config import ArticleData, ScraperConfig
+
+# Scrolling constants (ported from original scraper).
+MAX_SCROLLS_PER_PAGE: int = 2
+SCROLL_WAIT_SECONDS: float = 2.0
 
 logger = logging.getLogger(__name__)
 
@@ -80,3 +85,19 @@ class BrowserSearchStrategy(ISearchStrategy):
 
         self._pw = await async_playwright().start()
         self._browser = await self._pw.chromium.launch(headless=True)  # type: ignore[union-attr]
+
+    async def _scroll_page(self, page: object) -> None:
+        """Scroll the page to trigger lazy-loaded content.
+
+        Scrolls up to :data:`MAX_SCROLLS_PER_PAGE` times, waiting
+        :data:`SCROLL_WAIT_SECONDS` between scrolls.  Stops early if the
+        page height doesn't change (no new content loaded).
+        """
+        last_height = await page.evaluate("document.body.scrollHeight")  # type: ignore[union-attr]
+        for _ in range(MAX_SCROLLS_PER_PAGE):
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")  # type: ignore[union-attr]
+            await asyncio.sleep(SCROLL_WAIT_SECONDS)
+            new_height = await page.evaluate("document.body.scrollHeight")  # type: ignore[union-attr]
+            if new_height == last_height:
+                break
+            last_height = new_height

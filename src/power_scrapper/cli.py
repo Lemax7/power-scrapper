@@ -52,6 +52,7 @@ def _merge_config(toml_cfg: dict[str, Any], cli_ns: argparse.Namespace) -> dict[
         "language": "language",
         "country": "country",
         "debug": "debug",
+        "strict_search": "strict_search",
         "expand_titles": "expand_with_titles",
         "max_expand_titles": "max_titles_to_expand",
         "proxy": "use_proxy",
@@ -109,6 +110,31 @@ def build_parser() -> argparse.ArgumentParser:
     # Locale
     parser.add_argument("--language", "-l", default="ru", help="Search language (default: ru)")
     parser.add_argument("--country", "-c", default="RU", help="Search country (default: RU)")
+
+    # Engine selection (browser-based fallback strategies)
+    parser.add_argument(
+        "--engines",
+        nargs="*",
+        choices=["google", "google-news", "yandex", "all"],
+        default=["all"],
+        help="Browser engines to use (default: all). SearXNG is always used when configured.",
+    )
+
+    # Extraction control
+    parser.add_argument(
+        "--no-extract",
+        action="store_true",
+        default=False,
+        help="Skip article text extraction",
+    )
+
+    # Strict search
+    parser.add_argument(
+        "--strict-search",
+        action="store_true",
+        default=None,
+        help="Enable strict (exact phrase) search — wraps query in quotes",
+    )
 
     # Title expansion
     parser.add_argument(
@@ -173,7 +199,7 @@ def build_parser() -> argparse.ArgumentParser:
 # Docker lifecycle
 # ---------------------------------------------------------------------------
 
-_DOCKER_COMPOSE_DIR = Path(__file__).resolve().parent.parent / "docker"
+_DOCKER_COMPOSE_DIR = Path(__file__).resolve().parent.parent.parent / "docker"
 
 
 def _docker_compose_up(log: logging.Logger) -> bool:
@@ -241,6 +267,18 @@ def main(argv: list[str] | None = None) -> None:
     else:
         formats = [output_format]
 
+    # Resolve engine selection to internal strategy names.
+    engine_map: dict[str, str] = {
+        "google": "google_search",
+        "google-news": "google_news",
+        "yandex": "yandex",
+    }
+    engines = merged.get("engines", args.engines) or ["all"]
+    if "all" in engines:
+        only_strategies: list[str] | None = None
+    else:
+        only_strategies = [engine_map[e] for e in engines if e in engine_map]
+
     config = ScraperConfig(
         query=merged.get("query", args.query),
         max_pages=merged.get("max_pages", 3),
@@ -255,6 +293,9 @@ def main(argv: list[str] | None = None) -> None:
         max_titles_to_expand=merged.get("max_titles_to_expand", 5),
         time_period=merged.get("time_period"),
         max_concurrent_extractions=merged.get("max_concurrent_extractions", 10),
+        strict_search=merged.get("strict_search", False),
+        extract_articles=not args.no_extract,
+        only_strategies=only_strategies,
     )
 
     log = setup_logging(config.debug)

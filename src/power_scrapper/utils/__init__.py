@@ -1,4 +1,4 @@
-"""Utility helpers: date parsing, deduplication, Punycode decoding, URL building, small media."""
+"""Utility helpers: date parsing, deduplication, Punycode decoding, URL building, small media, text cleaning."""
 
 from power_scrapper.utils.date_parser import DateParser
 from power_scrapper.utils.dedup import (
@@ -8,6 +8,7 @@ from power_scrapper.utils.dedup import (
 )
 from power_scrapper.utils.punycode import PunycodeDecoder, extract_domain
 from power_scrapper.utils.small_media import SmallMediaLoader
+from power_scrapper.utils.text_cleaning import clean_snippet
 from power_scrapper.utils.url_builder import (
     YANDEX_REGIONS,
     build_google_news_url,
@@ -25,6 +26,7 @@ __all__ = [
     "build_google_search_url",
     "build_site_query",
     "build_yandex_search_url",
+    "clean_snippet",
     "deduplicate_articles",
     "filter_relevant",
     "extract_domain",

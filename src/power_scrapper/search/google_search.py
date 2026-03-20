@@ -12,6 +12,7 @@ from power_scrapper.errors import BotDetectedError, BrowserSearchError
 from power_scrapper.search.base import BrowserSearchStrategy
 from power_scrapper.utils import DateParser
 from power_scrapper.utils.punycode import extract_domain as _extract_domain
+from power_scrapper.utils.text_cleaning import clean_snippet
 from power_scrapper.utils.url_builder import build_google_search_url
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,25 @@ BOT_DETECTION_PHRASES: list[str] = [
     "я не робот",
 ]
 
+# Google blocking indicators (separate from bot detection — these indicate
+# the search itself is blocked, not just a CAPTCHA challenge).
+GOOGLE_BLOCKING_INDICATORS: list[str] = [
+    "sorry, we are unable to deliver results",
+    "we can't search for results",
+    "traffic from your computer network",
+    "трафик с вашей компьютерной сети",
+    "please check the url for typos",
+    "проверьте правильность url",
+]
+
+# URL patterns that indicate Google redirected to a blocking page.
+BLOCKING_URL_PATTERNS: list[str] = [
+    "captcha",
+    "blocked",
+    "denied",
+    "sorry",
+]
+
 CAPTCHA_SELECTORS: list[str] = [
     "div[id*='captcha']",
     "div[class*='captcha']",
@@ -51,13 +71,23 @@ CAPTCHA_SELECTORS: list[str] = [
 # Google system messages to filter out (not real articles)
 GOOGLE_SYSTEM_MESSAGES: list[str] = [
     "по запросу",
+    "по вашему запросу",
+    "для запроса",
     "nothing found",
     "no results",
     "ничего не найдено",
+    "ничего не найден",
     "результатов не найдено",
+    "попробуйте",
     "другие также ищут",
     "people also search",
     "related searches",
+    "показать ещё",
+    "show more",
+    "next",
+    "previous",
+    "назад",
+    "далее",
 ]
 
 # CSS selectors to try for extracting result items (Google changes these frequently)
@@ -69,10 +99,23 @@ _RESULT_SELECTORS: list[str] = [
 ]
 
 
-def check_bot_detection(content: str) -> bool:
-    """Return True if the page content contains bot-detection signals."""
+def check_bot_detection(content: str, *, current_url: str = "") -> bool:
+    """Return True if the page content contains bot-detection signals.
+
+    Also checks ``current_url`` for blocking URL patterns (Google may
+    redirect to a captcha/sorry page).
+    """
     content_lower = content.lower()
-    return any(phrase in content_lower for phrase in BOT_DETECTION_PHRASES)
+    if any(phrase in content_lower for phrase in BOT_DETECTION_PHRASES):
+        return True
+    if any(phrase in content_lower for phrase in GOOGLE_BLOCKING_INDICATORS):
+        return True
+    # Check if Google redirected to a blocking page.
+    if current_url:
+        url_lower = current_url.lower()
+        if any(pattern in url_lower for pattern in BLOCKING_URL_PATTERNS):
+            return True
+    return False
 
 
 def _is_google_system_message(title: str) -> bool:
@@ -109,9 +152,11 @@ class GoogleSearchStrategy(BrowserSearchStrategy):
                 await asyncio.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
 
                 content = await page.content()
-                if check_bot_detection(content):
+                current_url = str(page.url) if hasattr(page, "url") and isinstance(page.url, str) else ""
+                if check_bot_detection(content, current_url=current_url):
                     raise BotDetectedError("Google detected bot activity")
 
+                await self._scroll_page(page)
                 articles = await self._parse_results(page, page_num + 1)
                 all_articles.extend(articles)
 
@@ -127,6 +172,9 @@ class GoogleSearchStrategy(BrowserSearchStrategy):
             finally:
                 await page.close()
 
+        # Calculate overall_position across all pages.
+        for i, article in enumerate(all_articles):
+            article.overall_position = i + 1
         return all_articles
 
     @property
@@ -221,7 +269,7 @@ class GoogleSearchStrategy(BrowserSearchStrategy):
             title=title,
             source=source,
             date=date,
-            body=body,
+            body=clean_snippet(body),
             source_type="google_search",
             page=page_number,
             position=position,

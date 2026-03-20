@@ -59,6 +59,15 @@ class CascadeTextExtractor(ITextExtractor):
         except ImportError:
             pass
 
+        try:
+            from power_scrapper.extraction.patchright_ext import (
+                PatchrightExtractor,  # noqa: PLC0415
+            )
+
+            extractors.append(PatchrightExtractor())
+        except ImportError:
+            pass
+
         return extractors
 
     # ------------------------------------------------------------------
@@ -95,6 +104,15 @@ class CascadeTextExtractor(ITextExtractor):
     # ------------------------------------------------------------------
     # Batch extraction
     # ------------------------------------------------------------------
+
+    async def close(self) -> None:
+        """Close any extractors that hold resources (e.g. browser processes)."""
+        for extractor in self._extractors:
+            if hasattr(extractor, "close"):
+                try:
+                    await extractor.close()
+                except Exception:  # noqa: BLE001
+                    logger.debug("Failed to close extractor %s", extractor.name)
 
     async def extract_batch(
         self,

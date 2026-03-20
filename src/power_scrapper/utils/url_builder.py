@@ -17,6 +17,21 @@ YANDEX_REGIONS: dict[str, int] = {
 }
 
 
+def _apply_strict_search(query: str, config: ScraperConfig, *, news_tab: bool = False) -> str:
+    """Wrap query in quotes for exact phrase matching when strict_search is enabled.
+
+    For the News tab, Google uses ``[brackets]`` instead of ``"quotes"``.
+    """
+    if not config.strict_search:
+        return query
+    # Already quoted — leave as-is.
+    if query.startswith('"') and query.endswith('"'):
+        return query
+    if news_tab:
+        return f"[{query}]"
+    return f'"{query}"'
+
+
 def build_google_search_url(
     query: str,
     config: ScraperConfig,
@@ -31,7 +46,8 @@ def build_google_search_url(
     explicitly it is always included in the URL.  When using ``page``,
     the ``start`` parameter is omitted for page 0.
     """
-    params = f"q={quote_plus(query)}&hl={config.language}&gl={config.country}"
+    q = _apply_strict_search(query, config)
+    params = f"q={quote_plus(q)}&hl={config.language}&gl={config.country}"
     if start is not None:
         params += f"&start={start}"
     elif page > 0:
@@ -56,7 +72,8 @@ def build_google_news_url(
     explicitly it is always included in the URL.  When using ``page``,
     the ``start`` parameter is omitted for page 0.
     """
-    params = f"q={quote_plus(query)}&hl={config.language}&gl={config.country}&tbm=nws"
+    q = _apply_strict_search(query, config, news_tab=True)
+    params = f"q={quote_plus(q)}&hl={config.language}&gl={config.country}&tbm=nws"
     if start is not None:
         params += f"&start={start}"
     elif page > 0:
@@ -82,8 +99,9 @@ def build_yandex_search_url(
     Uses the ``YANDEX_REGIONS`` mapping to resolve the ``lr`` parameter
     from ``config.country``.
     """
+    q = _apply_strict_search(query, config)
     lr = YANDEX_REGIONS.get(config.country, 213)
-    params = f"text={quote_plus(query)}&lr={lr}"
+    params = f"text={quote_plus(q)}&lr={lr}"
     if page_num is not None:
         params += f"&p={page_num}"
     elif page > 0:

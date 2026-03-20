@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from power_scrapper.config import ArticleData, ScraperConfig
-from power_scrapper.errors import SearchError
+from power_scrapper.errors import BotDetectedError, SearchError
 from power_scrapper.extraction.base import ITextExtractor
 from power_scrapper.extraction.cascade import CascadeTextExtractor
 from power_scrapper.http.httpx_client import HttpxClient
@@ -67,10 +68,20 @@ class Scraper:
 
         # 1. Setup HTTP client
         self._http_client = HttpxClient()
+        extractor: ITextExtractor | None = None
 
         try:
             # 2. Setup search strategies (auto-detect SearXNG if url configured)
             strategies = self._search_strategies or await self._build_strategies()
+
+            # 2a. Filter strategies if only_strategies is set.
+            if self.config.only_strategies:
+                allowed = set(self.config.only_strategies)
+                strategies = [s for s in strategies if s.name in allowed]
+                run_logger.info(
+                    "Strategy filter active: using %s",
+                    [s.name for s in strategies],
+                )
 
             # 3. Search phase
             all_articles: list[ArticleData] = []
@@ -85,6 +96,12 @@ class Scraper:
                         )
                         run_logger.info("%s returned %d articles", strategy.name, len(articles))
                         all_articles.extend(articles)
+                    except BotDetectedError as exc:
+                        run_logger.warning(
+                            "Bot detected on %s: %s — skipping strategy",
+                            strategy.name,
+                            exc,
+                        )
                     except SearchError as exc:
                         run_logger.warning("Strategy %s failed: %s", strategy.name, exc)
                 else:
@@ -133,7 +150,7 @@ class Scraper:
             output_dir.mkdir(parents=True, exist_ok=True)
             writers = self._output_writers or self._build_writers()
 
-            stem = self.config.query.replace(" ", "_")[:50]
+            stem = self._build_output_stem()
             for writer in writers:
                 path = output_dir / f"{stem}{writer.extension}"
                 written = writer.write(articles, path)
@@ -142,6 +159,13 @@ class Scraper:
             return articles
 
         finally:
+            # Close the text extractor (releases Patchright browser if used).
+            if extractor is not None and hasattr(extractor, "close"):
+                try:
+                    await extractor.close()
+                except Exception:  # noqa: BLE001
+                    logger.debug("Failed to close text extractor")
+
             # Close browser-based strategies to release Patchright processes.
             for bs in self._browser_strategies_to_close:
                 try:
@@ -275,6 +299,17 @@ class Scraper:
 
         combined = articles + media_articles
         return deduplicate_articles(combined)
+
+    def _build_output_stem(self) -> str:
+        """Build a descriptive filename stem including query, time filter, and timestamp.
+
+        Example: ``AI_news_w_3pages_20260320_143022``
+        """
+        query_part = self.config.query.replace(" ", "_")[:50]
+        time_part = f"_{self.config.time_period}" if self.config.time_period else ""
+        pages_part = f"_{self.config.max_pages}pages"
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return f"{query_part}{time_part}{pages_part}_{ts}"
 
     def _build_writers(self) -> list[IOutputWriter]:
         """Build output writers from the configured format list."""

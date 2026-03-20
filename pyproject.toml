@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "power_scrapper"
+name = "power-scrapper"
 version = "0.1.0"
 description = "Next-generation news scraping module with SearXNG, Playwright, and multi-source extraction"
 requires-python = ">=3.11"
@@ -34,6 +34,7 @@ dev = [
 power-scrapper = "power_scrapper.cli:main"
 
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["power_scrapper*"]
 
 [tool.ruff]

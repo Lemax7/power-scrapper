@@ -12,6 +12,7 @@ from power_scrapper.http.base import IHttpClient
 from power_scrapper.search.base import ISearchStrategy
 from power_scrapper.utils import DateParser
 from power_scrapper.utils.punycode import extract_domain
+from power_scrapper.utils.text_cleaning import clean_snippet
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ class SearXNGStrategy(ISearchStrategy):
                     title=item.get("title", ""),
                     source=_extract_domain(item.get("url", "")),
                     date=DateParser.parse_date(item.get("publishedDate", "")),
-                    body=item.get("content", ""),
+                    body=clean_snippet(item.get("content", "")),
                     source_type="searxng",
                     page=page,
                     position=i + 1,
@@ -90,6 +91,9 @@ class SearXNGStrategy(ISearchStrategy):
                 len(all_results),
             )
 
+        # Calculate overall_position across all pages.
+        for i, article in enumerate(all_results):
+            article.overall_position = i + 1
         return all_results
 
     async def is_available(self) -> bool:

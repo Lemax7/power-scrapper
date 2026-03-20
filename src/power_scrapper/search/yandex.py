@@ -12,6 +12,7 @@ from power_scrapper.errors import BotDetectedError, BrowserSearchError
 from power_scrapper.search.base import BrowserSearchStrategy
 from power_scrapper.utils import DateParser
 from power_scrapper.utils.punycode import extract_domain as _extract_domain
+from power_scrapper.utils.text_cleaning import clean_snippet
 from power_scrapper.utils.url_builder import (
     YANDEX_REGIONS,  # noqa: F401 -- re-exported for backward compatibility
     build_yandex_search_url,
@@ -99,6 +100,7 @@ class YandexSearchStrategy(BrowserSearchStrategy):
                 if check_yandex_bot_detection(content):
                     raise BotDetectedError("Yandex detected bot activity")
 
+                await self._scroll_page(page)
                 articles = await self._parse_results(page, page_num + 1)
                 all_articles.extend(articles)
 
@@ -112,6 +114,9 @@ class YandexSearchStrategy(BrowserSearchStrategy):
             finally:
                 await page.close()
 
+        # Calculate overall_position across all pages.
+        for i, article in enumerate(all_articles):
+            article.overall_position = i + 1
         return all_articles
 
     @property
@@ -224,7 +229,7 @@ class YandexSearchStrategy(BrowserSearchStrategy):
             title=title,
             source=source,
             date=date,
-            body=body,
+            body=clean_snippet(body),
             source_type="yandex",
             page=page_number,
             position=position,
