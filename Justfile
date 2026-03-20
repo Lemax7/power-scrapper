@@ -4,32 +4,36 @@ default:
 
 # --- Dev workflow ---
 
+# Install/sync all dependencies (core + dev)
+sync:
+    uv sync
+
+# Install with stealth extras (rnet, camoufox, nodriver, seleniumbase, crawl4ai)
+sync-stealth:
+    uv sync --extra stealth
+
 # Run all tests
 test *args:
     uv run pytest tests/ {{args}}
 
 # Run linter
 lint:
-    ruff check .
+    uv run ruff check .
 
 # Auto-format code
 fmt:
-    ruff format .
+    uv run ruff format .
 
 # Lint + format
 check: lint fmt
 
 # Type check
 typecheck:
-    uv run mypy power_scrapper/
+    uv run mypy src/power_scrapper/
 
-# Install in dev mode
-install:
-    pip install -e ".[dev]"
-
-# Build distribution
-build:
-    uv run python -m build
+# Lock dependencies (regenerate uv.lock)
+lock:
+    uv lock
 
 # --- Scraper CLI ---
 

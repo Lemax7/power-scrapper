@@ -102,9 +102,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output-format",
-        choices=["excel", "json", "csv", "all"],
+        choices=["excel", "json", "csv", "markdown", "all"],
         default="all",
         help="Output format (default: all)",
+    )
+    parser.add_argument(
+        "--max-chars",
+        type=int,
+        default=None,
+        help="Max characters per article text in markdown output (default: no limit)",
     )
 
     # Locale
@@ -172,6 +178,26 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Max concurrent article extractions (default: 10)",
+    )
+
+    # Cache control
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        default=False,
+        help="Disable response cache",
+    )
+    parser.add_argument(
+        "--cache-ttl",
+        type=int,
+        default=None,
+        help="Cache TTL in hours (default: 24)",
+    )
+    parser.add_argument(
+        "--clear-cache",
+        action="store_true",
+        default=False,
+        help="Clear expired cache entries before running",
     )
 
     # Config file
@@ -263,7 +289,7 @@ def main(argv: list[str] | None = None) -> None:
     # Handle output formats
     output_format = args.output_format
     if output_format == "all":
-        formats = merged.get("output_formats", ["excel", "json", "csv"])
+        formats = merged.get("output_formats", ["excel", "json", "csv", "markdown"])
     else:
         formats = [output_format]
 
@@ -296,10 +322,21 @@ def main(argv: list[str] | None = None) -> None:
         strict_search=merged.get("strict_search", False),
         extract_articles=not args.no_extract,
         only_strategies=only_strategies,
+        use_cache=not args.no_cache,
+        cache_ttl_hours=args.cache_ttl or merged.get("cache_ttl_hours", 24),
+        max_chars=args.max_chars or merged.get("max_chars"),
     )
 
     log = setup_logging(config.debug)
     log.info("Starting power_scrapper: query=%r, pages=%d", config.query, config.max_pages)
+
+    # Handle cache clearing
+    if args.clear_cache:
+        from power_scrapper.utils.cache import ResponseCache  # noqa: PLC0415
+
+        cache = ResponseCache(ttl_hours=config.cache_ttl_hours)
+        cache.clear_expired()
+        cache.close()
 
     # Auto-start SearXNG if requested
     docker_started = False

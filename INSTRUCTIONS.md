@@ -3,7 +3,10 @@
 ### Install
 
 ```bash
-# From GitHub (SSH)
+# With uv (recommended)
+uv add "power-scrapper @ git+ssh://git@github.com/Lemax7/power-scrapper.git@main"
+
+# Or with pip
 pip install git+ssh://git@github.com/Lemax7/power-scrapper.git
 
 # From GitHub (HTTPS — for CI or if SSH not configured)

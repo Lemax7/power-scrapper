@@ -21,6 +21,7 @@ MAX_ARTICLE_TEXT_LENGTH: int = 3000
 DEFAULT_TIMEOUT: int = 10  # seconds
 MIN_DELAY: int = 5  # seconds
 MAX_DELAY: int = 15  # seconds
+DEFAULT_CACHE_TTL_HOURS: int = 24
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -48,6 +49,11 @@ class ScraperConfig:
     max_concurrent_extractions: int = 10
     strict_search: bool = False
     only_strategies: list[str] | None = None  # e.g. ["google_search"] or ["google_news"]
+    # Cache settings
+    use_cache: bool = True
+    cache_ttl_hours: int = DEFAULT_CACHE_TTL_HOURS
+    # Markdown output settings
+    max_chars: int | None = None  # Per-article text truncation for markdown output
 
 
 @dataclass

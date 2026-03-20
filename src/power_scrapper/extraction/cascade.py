@@ -11,6 +11,7 @@ from power_scrapper.extraction.trafilatura_ext import TrafilaturaExtractor
 
 if TYPE_CHECKING:
     from power_scrapper.config import ArticleData
+    from power_scrapper.http.base import IHttpClient
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +25,19 @@ class CascadeTextExtractor(ITextExtractor):
     Default cascade: trafilatura -> newspaper4k -> readability -> crawl4ai.
     Extractors whose underlying library is not installed are silently skipped
     during construction.
+
+    When an *http_client* is provided, HTML is pre-fetched once and passed to
+    all extractors -- avoiding redundant HTTP requests per extractor.
     """
 
-    def __init__(self, extractors: list[ITextExtractor] | None = None) -> None:
+    def __init__(
+        self,
+        extractors: list[ITextExtractor] | None = None,
+        *,
+        http_client: IHttpClient | None = None,
+    ) -> None:
         self._extractors = extractors if extractors is not None else self._default_extractors()
+        self._http_client = http_client
 
     # ------------------------------------------------------------------
     # Factory
@@ -75,7 +85,21 @@ class CascadeTextExtractor(ITextExtractor):
     # ------------------------------------------------------------------
 
     async def extract(self, url: str, html: str | None = None) -> str:
-        """Try each extractor in order; return the first viable result."""
+        """Try each extractor in order; return the first viable result.
+
+        If an *http_client* was provided at construction and *html* is ``None``,
+        the HTML is pre-fetched once and shared across all extractors.
+        """
+        # Pre-fetch HTML once if we have an HTTP client and no HTML provided.
+        if html is None and self._http_client is not None:
+            try:
+                response = await self._http_client.get(url)
+                if response.status_code == 200 and response.text:
+                    html = response.text
+                    logger.debug("Pre-fetched %d chars for %s", len(html), url)
+            except Exception:  # noqa: BLE001
+                logger.debug("Pre-fetch failed for %s, extractors will fetch independently", url)
+
         for extractor in self._extractors:
             try:
                 result = await extractor.extract(url, html)

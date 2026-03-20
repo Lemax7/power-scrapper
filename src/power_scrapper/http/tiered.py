@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from power_scrapper.errors import AllTiersExhaustedError, HttpClientError
 from power_scrapper.http.base import HttpResponse, IHttpClient
+
+if TYPE_CHECKING:
+    from power_scrapper.utils.cache import ResponseCache
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +69,7 @@ class TieredHttpClient(IHttpClient):
         tiers: list[IHttpClient] | None = None,
         timeout: float = 10.0,
         proxy: str | None = None,
+        cache: ResponseCache | None = None,
     ) -> None:
         self._tiers = (
             tiers
@@ -75,6 +80,7 @@ class TieredHttpClient(IHttpClient):
             )
         )
         self._domain_tier: dict[str, int] = {}
+        self._cache = cache
 
     @staticmethod
     def _build_default_tiers(
@@ -90,17 +96,30 @@ class TieredHttpClient(IHttpClient):
 
         tiers.append(HttpxClient(timeout=timeout, proxy=proxy))
 
-        # Tier 2: curl_cffi -- optional.
+        # Tier 2: rnet (preferred) or curl_cffi (legacy fallback).
         try:
-            from power_scrapper.http.curl_cffi_client import CurlCffiClient
+            from power_scrapper.http.rnet_client import RnetClient  # noqa: PLC0415
 
-            tiers.append(CurlCffiClient(timeout=timeout, proxy=proxy))
+            tiers.append(RnetClient(timeout=timeout, proxy=proxy))
         except Exception:  # noqa: BLE001
-            logger.debug("curl_cffi not available, skipping tier 2")
+            try:
+                from power_scrapper.http.curl_cffi_client import CurlCffiClient  # noqa: PLC0415
+
+                tiers.append(CurlCffiClient(timeout=timeout, proxy=proxy))
+            except Exception:  # noqa: BLE001
+                logger.debug("Neither rnet nor curl_cffi available, skipping tier 2")
+
+        # Tier 2.5: camoufox -- optional (Firefox-based anti-detect).
+        try:
+            from power_scrapper.http.camoufox_client import CamoufoxClient  # noqa: PLC0415
+
+            tiers.append(CamoufoxClient(timeout=timeout, proxy=proxy))
+        except Exception:  # noqa: BLE001
+            logger.debug("camoufox not available, skipping tier 2.5")
 
         # Tier 3: patchright -- optional.
         try:
-            from power_scrapper.http.patchright_client import PatchrightClient
+            from power_scrapper.http.patchright_client import PatchrightClient  # noqa: PLC0415
 
             tiers.append(PatchrightClient(timeout=timeout, proxy=proxy))
         except Exception:  # noqa: BLE001
@@ -111,8 +130,18 @@ class TieredHttpClient(IHttpClient):
     async def get(self, url: str, *, headers: dict[str, str] | None = None) -> HttpResponse:
         """Try each tier in order; escalate on failure or blocking.
 
+        Checks the response cache first (if configured).
         Raises :class:`AllTiersExhaustedError` if every tier fails.
         """
+        # Check cache first.
+        if self._cache is not None:
+            cached = self._cache.get(url)
+            if cached is not None:
+                body, status_code = cached
+                return HttpResponse(
+                    status_code=status_code, text=body, headers={}, url=url
+                )
+
         domain = _extract_domain(url)
         start_tier = self._domain_tier.get(domain, 0)
 
@@ -132,6 +161,11 @@ class TieredHttpClient(IHttpClient):
 
                 # Success -- remember which tier worked for this domain.
                 self._domain_tier[domain] = i
+
+                # Cache successful responses.
+                if self._cache is not None and response.status_code == 200:
+                    self._cache.put(url, response.text, response.status_code)
+
                 return response
             except HttpClientError:
                 logger.info(

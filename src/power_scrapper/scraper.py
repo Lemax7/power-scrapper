@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -11,17 +12,21 @@ from power_scrapper.config import ArticleData, ScraperConfig
 from power_scrapper.errors import BotDetectedError, SearchError
 from power_scrapper.extraction.base import ITextExtractor
 from power_scrapper.extraction.cascade import CascadeTextExtractor
-from power_scrapper.http.httpx_client import HttpxClient
+from power_scrapper.http.base import IHttpClient
+from power_scrapper.http.tiered import TieredHttpClient
 from power_scrapper.log import setup_logging
 from power_scrapper.output.base import IOutputWriter
 from power_scrapper.output.csv_writer import CsvWriter
 from power_scrapper.output.excel import ExcelWriter
 from power_scrapper.output.json_writer import JsonWriter
+from power_scrapper.output.markdown_writer import MarkdownWriter
+from power_scrapper.proxy.manager import ProxyManager
 from power_scrapper.search.base import ISearchStrategy
 from power_scrapper.search.google_news import GoogleNewsStrategy
 from power_scrapper.search.google_search import GoogleSearchStrategy
 from power_scrapper.search.searxng import SearXNGStrategy
 from power_scrapper.search.yandex import YandexSearchStrategy
+from power_scrapper.utils.cache import ResponseCache
 from power_scrapper.utils.dedup import deduplicate_articles, filter_relevant
 from power_scrapper.utils.small_media import SmallMediaLoader
 from power_scrapper.utils.url_builder import build_site_query
@@ -42,15 +47,17 @@ class Scraper:
         search_strategies: list[ISearchStrategy] | None = None,
         output_writers: list[IOutputWriter] | None = None,
         text_extractor: ITextExtractor | None = None,
+        http_client: IHttpClient | None = None,
         small_media_file: str | None = None,
     ) -> None:
         self.config = config
-        self._http_client: HttpxClient | None = None
+        self._http_client: IHttpClient | None = http_client
         self._search_strategies = search_strategies
         self._output_writers = output_writers
         self._text_extractor = text_extractor
         self._browser_strategies_to_close: list[ISearchStrategy] = []
         self._small_media_file = small_media_file
+        self._cache: ResponseCache | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -60,14 +67,21 @@ class Scraper:
         """Execute the full scraping pipeline.  Returns deduplicated articles."""
         run_logger = setup_logging(self.config.debug)
 
-        # NOTE: Proxy integration is planned but not yet wired.
-        # config.use_proxy and config.proxy_rotation are accepted but
-        # currently unused.  At the expected scraping frequency (~1 req/hour)
-        # proxies are unlikely to be needed.  See proxy/ package for the
-        # ProxyManager implementation that will be connected here in future.
+        # 1. Setup cache
+        if self.config.use_cache:
+            self._cache = ResponseCache(ttl_hours=self.config.cache_ttl_hours)
 
-        # 1. Setup HTTP client
-        self._http_client = HttpxClient()
+        # 1a. Setup proxy manager (if enabled)
+        proxy_url: str | None = None
+        if self.config.use_proxy:
+            proxy_url = await self._setup_proxies(run_logger)
+
+        # 2. Setup HTTP client (TieredHttpClient with auto-escalation + cache + proxy)
+        if self._http_client is None:
+            self._http_client = TieredHttpClient(
+                cache=self._cache, proxy=proxy_url
+            )
+
         extractor: ITextExtractor | None = None
 
         try:
@@ -83,29 +97,10 @@ class Scraper:
                     [s.name for s in strategies],
                 )
 
-            # 3. Search phase
-            all_articles: list[ArticleData] = []
-            for strategy in strategies:
-                if await strategy.is_available():
-                    run_logger.info("Searching with %s...", strategy.name)
-                    try:
-                        articles = await strategy.search(
-                            self.config.query,
-                            self.config,
-                            max_pages=self.config.max_pages,
-                        )
-                        run_logger.info("%s returned %d articles", strategy.name, len(articles))
-                        all_articles.extend(articles)
-                    except BotDetectedError as exc:
-                        run_logger.warning(
-                            "Bot detected on %s: %s — skipping strategy",
-                            strategy.name,
-                            exc,
-                        )
-                    except SearchError as exc:
-                        run_logger.warning("Strategy %s failed: %s", strategy.name, exc)
-                else:
-                    run_logger.info("Strategy %s not available, skipping", strategy.name)
+            # 3. Search phase (concurrent — all strategies fire in parallel)
+            all_articles: list[ArticleData] = await self._search_concurrent(
+                strategies, run_logger
+            )
 
             if not all_articles:
                 run_logger.warning("No articles found from any strategy")
@@ -136,7 +131,9 @@ class Scraper:
 
             # 5. Text extraction
             if self.config.extract_articles:
-                extractor = self._text_extractor or CascadeTextExtractor()
+                extractor = self._text_extractor or CascadeTextExtractor(
+                    http_client=self._http_client,
+                )
                 run_logger.info("Extracting article text with %s...", extractor.name)
                 articles = await self._extract_texts(articles, extractor)
                 run_logger.info(
@@ -178,9 +175,84 @@ class Scraper:
             if self._http_client:
                 await self._http_client.close()
 
+            if self._cache:
+                self._cache.close()
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    async def _setup_proxies(self, run_logger: logging.Logger) -> str | None:
+        """Fetch and test proxies, return a working proxy URL or None."""
+        manager = ProxyManager()
+        count = await manager.fetch_all()
+        run_logger.info("Fetched %d proxies from all providers", count)
+
+        if count == 0:
+            run_logger.warning("No proxies available, proceeding without proxy")
+            return None
+
+        # Test proxies until we find a working one.
+        for _ in range(min(count, 10)):
+            proxy = manager.get_next()
+            if proxy is None:
+                break
+            if await manager.test_proxy(proxy):
+                run_logger.info("Using proxy: %s (%s)", proxy.url, proxy.country or "unknown")
+                return proxy.url
+
+        run_logger.warning("No working proxies found, proceeding without proxy")
+        return None
+
+    async def _search_concurrent(
+        self,
+        strategies: list[ISearchStrategy],
+        run_logger: logging.Logger,
+    ) -> list[ArticleData]:
+        """Run all search strategies concurrently and merge results.
+
+        Uses ``asyncio.gather()`` with a semaphore to limit concurrent
+        browser instances (max 3).
+        """
+        semaphore = asyncio.Semaphore(3)
+
+        async def _run_strategy(strategy: ISearchStrategy) -> list[ArticleData]:
+            if not await strategy.is_available():
+                run_logger.info("Strategy %s not available, skipping", strategy.name)
+                return []
+            async with semaphore:
+                run_logger.info("Searching with %s...", strategy.name)
+                try:
+                    articles = await strategy.search(
+                        self.config.query,
+                        self.config,
+                        max_pages=self.config.max_pages,
+                    )
+                    run_logger.info("%s returned %d articles", strategy.name, len(articles))
+                    return articles
+                except BotDetectedError as exc:
+                    run_logger.warning(
+                        "Bot detected on %s: %s — skipping strategy",
+                        strategy.name,
+                        exc,
+                    )
+                except SearchError as exc:
+                    run_logger.warning("Strategy %s failed: %s", strategy.name, exc)
+            return []
+
+        results = await asyncio.gather(
+            *[_run_strategy(s) for s in strategies],
+            return_exceptions=True,
+        )
+
+        all_articles: list[ArticleData] = []
+        for result in results:
+            if isinstance(result, list):
+                all_articles.extend(result)
+            elif isinstance(result, Exception):
+                run_logger.warning("Strategy raised unexpected error: %s", result)
+
+        return all_articles
 
     async def _build_strategies(self) -> list[ISearchStrategy]:
         """Build the default list of search strategies from config.
@@ -313,9 +385,14 @@ class Scraper:
 
     def _build_writers(self) -> list[IOutputWriter]:
         """Build output writers from the configured format list."""
-        writer_map: dict[str, type[IOutputWriter]] = {
-            "excel": ExcelWriter,
-            "json": JsonWriter,
-            "csv": CsvWriter,
-        }
-        return [writer_map[fmt]() for fmt in self.config.output_formats if fmt in writer_map]
+        writers: list[IOutputWriter] = []
+        for fmt in self.config.output_formats:
+            if fmt == "excel":
+                writers.append(ExcelWriter())
+            elif fmt == "json":
+                writers.append(JsonWriter())
+            elif fmt == "csv":
+                writers.append(CsvWriter())
+            elif fmt == "markdown":
+                writers.append(MarkdownWriter(max_chars=self.config.max_chars))
+        return writers

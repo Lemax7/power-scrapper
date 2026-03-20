@@ -7,12 +7,16 @@ import logging
 from abc import ABC, abstractmethod
 
 from power_scrapper.config import ArticleData, ScraperConfig
+from power_scrapper.utils.rate_limiter import AdaptiveRateLimiter
 
 # Scrolling constants (ported from original scraper).
 MAX_SCROLLS_PER_PAGE: int = 2
 SCROLL_WAIT_SECONDS: float = 2.0
 
 logger = logging.getLogger(__name__)
+
+# Shared rate limiter for all browser-based strategies.
+_rate_limiter = AdaptiveRateLimiter()
 
 
 class ISearchStrategy(ABC):
@@ -85,6 +89,18 @@ class BrowserSearchStrategy(ISearchStrategy):
 
         self._pw = await async_playwright().start()
         self._browser = await self._pw.chromium.launch(headless=True)  # type: ignore[union-attr]
+
+    @property
+    def rate_limiter(self) -> AdaptiveRateLimiter:
+        """Return the shared rate limiter instance."""
+        return _rate_limiter
+
+    async def _wait_between_pages(self, domain: str = "") -> None:
+        """Wait with human-like timing between page requests.
+
+        Uses the adaptive rate limiter instead of hardcoded random delays.
+        """
+        await _rate_limiter.wait(domain or self.name)
 
     async def _scroll_page(self, page: object) -> None:
         """Scroll the page to trigger lazy-loaded content.

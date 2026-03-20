@@ -1,5 +1,6 @@
-"""Utility helpers: date parsing, deduplication, Punycode decoding, URL building, small media, text cleaning."""
+"""Utility helpers: date parsing, dedup, Punycode, URL building, caching, rate limiting."""
 
+from power_scrapper.utils.cache import ResponseCache
 from power_scrapper.utils.date_parser import DateParser
 from power_scrapper.utils.dedup import (
     deduplicate_articles,
@@ -7,6 +8,7 @@ from power_scrapper.utils.dedup import (
     normalize_title_for_deduplication,
 )
 from power_scrapper.utils.punycode import PunycodeDecoder, extract_domain
+from power_scrapper.utils.rate_limiter import AdaptiveRateLimiter
 from power_scrapper.utils.small_media import SmallMediaLoader
 from power_scrapper.utils.text_cleaning import clean_snippet
 from power_scrapper.utils.url_builder import (
@@ -18,8 +20,10 @@ from power_scrapper.utils.url_builder import (
 )
 
 __all__ = [
+    "AdaptiveRateLimiter",
     "DateParser",
     "PunycodeDecoder",
+    "ResponseCache",
     "SmallMediaLoader",
     "YANDEX_REGIONS",
     "build_google_news_url",
