@@ -6,7 +6,7 @@ build/
 .venv/
 .env
 *.xlsx
-output/
+/output/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
