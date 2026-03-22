@@ -33,12 +33,19 @@ def _looks_blocked(response: HttpResponse) -> bool:
     """Return ``True`` if the response looks like a bot-detection block.
 
     Checks for common Cloudflare challenge indicators, CAPTCHAs, and
-    other anti-bot signals in the response body.
+    other anti-bot signals in the response body.  Skips JSON responses
+    since Cloudflare challenge pages are always HTML.
     """
     if not response.text:
         return False
 
-    # Short responses with block-like status codes are suspicious.
+    # JSON API responses (e.g. SearXNG) are never Cloudflare challenge pages.
+    # Their body may mention "access denied" as metadata about upstream engines,
+    # which would be a false positive.
+    content_type = response.headers.get("content-type", "")
+    if "application/json" in content_type:
+        return False
+
     text_lower = response.text.lower()
     return any(indicator.lower() in text_lower for indicator in _BLOCKED_INDICATORS)
 
