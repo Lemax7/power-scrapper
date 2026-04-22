@@ -34,11 +34,22 @@ def _looks_blocked(response: HttpResponse) -> bool:
 
     Checks for common Cloudflare challenge indicators, CAPTCHAs, and
     other anti-bot signals in the response body.
+
+    The heuristic is HTML-only: anti-bot challenges always render as HTML,
+    while JSON APIs legitimately contain strings like ``"access denied"``
+    inside metadata fields (e.g. SearXNG's ``unresponsive_engines`` reports
+    ``[["google", "Suspended: access denied"]]`` when an upstream engine
+    is rate-limited). Treating such JSON as a block caused every tier to
+    escalate and the SearXNG strategy to be marked unavailable.
     """
     if not response.text:
         return False
 
-    # Short responses with block-like status codes are suspicious.
+    if response.headers:
+        for key, value in response.headers.items():
+            if key.lower() == "content-type" and "application/json" in value.lower():
+                return False
+
     text_lower = response.text.lower()
     return any(indicator.lower() in text_lower for indicator in _BLOCKED_INDICATORS)
 

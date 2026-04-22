@@ -111,6 +111,43 @@ class TestLooksBlocked:
         )
         assert _looks_blocked(resp) is True
 
+    def test_json_response_with_indicator_in_body_not_blocked(self) -> None:
+        """JSON APIs legitimately contain error strings in metadata.
+
+        SearXNG reports upstream engine failures in ``unresponsive_engines``,
+        which can contain substrings like ``"Suspended: access denied"``.
+        The heuristic must not treat such JSON as a Cloudflare block.
+        """
+        resp = HttpResponse(
+            status_code=200,
+            text=(
+                '{"results": [{"title": "ok"}], '
+                '"unresponsive_engines": [["google", "Suspended: access denied"]]}'
+            ),
+            headers={"content-type": "application/json; charset=utf-8"},
+            url="http://127.0.0.1:8888/search",
+        )
+        assert _looks_blocked(resp) is False
+
+    def test_json_content_type_case_insensitive(self) -> None:
+        resp = HttpResponse(
+            status_code=200,
+            text='{"error": "Access denied"}',
+            headers={"Content-Type": "Application/JSON"},
+            url="https://api.example.com",
+        )
+        assert _looks_blocked(resp) is False
+
+    def test_html_with_indicator_still_blocked_even_if_header_missing(self) -> None:
+        """Absence of a content-type header should not disable the heuristic."""
+        resp = HttpResponse(
+            status_code=200,
+            text="<html>Checking your browser before accessing</html>",
+            headers={},
+            url="https://cloudflare-site.com",
+        )
+        assert _looks_blocked(resp) is True
+
 
 # ---------------------------------------------------------------------------
 # _extract_domain
